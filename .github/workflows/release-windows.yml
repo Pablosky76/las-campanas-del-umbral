@@ -1,0 +1,65 @@
+name: Publicar demo para Windows
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/release-windows.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-windows
+  cancel-in-progress: false
+
+env:
+  GODOT_VERSION: 4.7.2
+  RELEASE_TAG: v0.1.0
+  PACKAGE: Campanas-del-Umbral-Windows-x64.zip
+
+jobs:
+  windows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Instalar Godot y plantilla oficial
+        shell: bash
+        run: |
+          release="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable"
+          curl --fail --location --retry 3 "$release/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" -o "$RUNNER_TEMP/godot.zip"
+          curl --fail --location --retry 3 "$release/Godot_v${GODOT_VERSION}-stable_export_templates.tpz" -o "$RUNNER_TEMP/templates.tpz"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/engine"
+          install "$RUNNER_TEMP/engine/Godot_v${GODOT_VERSION}-stable_linux.x86_64" "$RUNNER_TEMP/godot"
+          carpeta="${XDG_DATA_HOME:-$HOME/.local/share}/godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$carpeta"
+          unzip -jo "$RUNNER_TEMP/templates.tpz" '*/windows_release_x86_64.exe' -d "$carpeta"
+      - name: Importar y probar el arranque
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/godot" --headless --path . --import
+          "$RUNNER_TEMP/godot" --headless --path . --quit-after 30 2>&1 | tee "$RUNNER_TEMP/prueba.log"
+          if grep -q 'SCRIPT ERROR' "$RUNNER_TEMP/prueba.log"; then
+            exit 1
+          fi
+      - name: Empaquetar la demo
+        shell: bash
+        run: |
+          mkdir -p .export
+          "$RUNNER_TEMP/godot" --headless --path . --export-release Windows "$PWD/.export/Las-Campanas-del-Umbral.exe"
+          test -s .export/Las-Campanas-del-Umbral.exe
+          zip -j "$RUNNER_TEMP/$PACKAGE" .export/Las-Campanas-del-Umbral.exe README.md
+          unzip -tq "$RUNNER_TEMP/$PACKAGE"
+      - name: Publicar en Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "La versión $RELEASE_TAG ya está publicada."
+            exit 0
+          fi
+          gh release create "$RELEASE_TAG" "$RUNNER_TEMP/$PACKAGE" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Las Campanas del Umbral — Demo para Windows" \
+            --notes "Descarga el ZIP, descomprímelo y ejecuta Las-Campanas-del-Umbral.exe. Incluye Valdebronce y las plantas −1 a −8."
