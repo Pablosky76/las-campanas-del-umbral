@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/export-web.yml'
       - 'export_presets.cfg'
+      - 'project.godot'
   workflow_dispatch:
 
 permissions:
