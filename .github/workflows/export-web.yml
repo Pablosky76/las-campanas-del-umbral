@@ -1,15 +1,18 @@
-name: Generar juego web
+name: Generar y publicar juego web
+
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/export-web.yml'
-      - 'export_presets.cfg'
-      - 'project.godot'
   workflow_dispatch:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   web:
@@ -17,8 +20,13 @@ jobs:
     timeout-minutes: 15
     env:
       GODOT_VERSION: 4.7.2
+
     steps:
       - uses: actions/checkout@v5
+
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v5
+
       - name: Descargar Godot y la plantilla Web
         shell: bash
         run: |
@@ -30,6 +38,7 @@ jobs:
           carpeta="${XDG_DATA_HOME:-$HOME/.local/share}/godot/export_templates/${GODOT_VERSION}.stable"
           mkdir -p "$carpeta"
           unzip -jo "$RUNNER_TEMP/templates.tpz" '*/web_nothreads_release.zip' '*/web_nothreads_debug.zip' -d "$carpeta"
+
       - name: Exportar y verificar los archivos Web
         shell: bash
         run: |
@@ -41,9 +50,28 @@ jobs:
             test -s "$sitio/$archivo"
           done
           touch "$sitio/.nojekyll"
-      - uses: actions/upload-artifact@v4
+
+      - name: Guardar juego descargable
+        uses: actions/upload-artifact@v4
         with:
           name: Campanas-del-Umbral-Web
           path: ${{ runner.temp }}/umbral-web/
           include-hidden-files: true
           if-no-files-found: error
+
+      - name: Preparar publicacion web
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/umbral-web/
+
+  deploy:
+    needs: web
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Publicar videojuego
+        id: deployment
+        uses: actions/deploy-pages@v4
