@@ -1,0 +1,48 @@
+name: Generar juego web
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/export-web.yml'
+      - 'export_presets.cfg'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GODOT_VERSION: 4.7.2
+    steps:
+      - uses: actions/checkout@v5
+      - name: Descargar Godot y la plantilla Web
+        shell: bash
+        run: |
+          release="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable"
+          curl --fail --location --retry 3 "$release/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" -o "$RUNNER_TEMP/godot.zip"
+          curl --fail --location --retry 3 "$release/Godot_v${GODOT_VERSION}-stable_export_templates.tpz" -o "$RUNNER_TEMP/templates.tpz"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/engine"
+          install "$RUNNER_TEMP/engine/Godot_v${GODOT_VERSION}-stable_linux.x86_64" "$RUNNER_TEMP/godot"
+          carpeta="${XDG_DATA_HOME:-$HOME/.local/share}/godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$carpeta"
+          unzip -jo "$RUNNER_TEMP/templates.tpz" '*/web_nothreads_release.zip' -d "$carpeta"
+      - name: Exportar y verificar los archivos Web
+        shell: bash
+        run: |
+          sitio="$RUNNER_TEMP/umbral-web"
+          mkdir -p "$sitio"
+          "$RUNNER_TEMP/godot" --headless --path . --import
+          "$RUNNER_TEMP/godot" --headless --path . --export-release Web "$sitio/index.html"
+          for archivo in index.html index.js index.wasm index.pck; do
+            test -s "$sitio/$archivo"
+          done
+          touch "$sitio/.nojekyll"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Campanas-del-Umbral-Web
+          path: ${{ runner.temp }}/umbral-web/
+          include-hidden-files: true
+          if-no-files-found: error
