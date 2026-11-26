@@ -28,7 +28,7 @@ jobs:
           install "$RUNNER_TEMP/engine/Godot_v${GODOT_VERSION}-stable_linux.x86_64" "$RUNNER_TEMP/godot"
           carpeta="${XDG_DATA_HOME:-$HOME/.local/share}/godot/export_templates/${GODOT_VERSION}.stable"
           mkdir -p "$carpeta"
-          unzip -jo "$RUNNER_TEMP/templates.tpz" '*/web_nothreads_release.zip' -d "$carpeta"
+          unzip -jo "$RUNNER_TEMP/templates.tpz" '*/web_nothreads_release.zip' '*/web_nothreads_debug.zip' -d "$carpeta"
       - name: Exportar y verificar los archivos Web
         shell: bash
         run: |
