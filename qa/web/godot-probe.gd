@@ -12,6 +12,8 @@ func _process(_delta: float) -> void:
 		"zona": "mina" if is_instance_valid(mina) else "valdebronce",
 		"planta": mina.planta if is_instance_valid(mina) else 0,
 		"panel": plaza.panel,
+		"ayuda": plaza.ayuda.visible,
+		"esbirros": mina.allies.map(func(unit: Combatiente): return unit.role) if is_instance_valid(mina) else [],
 		"ritual": mina.ritual if is_instance_valid(mina) else false,
 		"silencio": plaza.ambiente.silenciado,
 		"posicion": [snappedf(plaza.at.x, 0.5), snappedf(plaza.at.y, 0.5)],

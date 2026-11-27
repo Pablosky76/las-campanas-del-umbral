@@ -36,7 +36,7 @@ jobs:
           mkdir -p "$carpeta"
           unzip -jo "$RUNNER_TEMP/templates.tpz" '*/web_nothreads_release.zip' '*/web_nothreads_debug.zip' -d "$carpeta"
 
-      - name: Ejecutar las 36 pruebas de Godot
+      - name: Ejecutar las 40 pruebas de Godot
         shell: bash
         env:
           GODOT_BIN: ${{ runner.temp }}/godot
@@ -63,7 +63,7 @@ jobs:
           "$RUNNER_TEMP/godot" --headless --path "$proyecto" --import
           "$RUNNER_TEMP/godot" --headless --path "$proyecto" --export-release Web "$sitio/index.html"
 
-      - name: Ejecutar las 20 pruebas de Cypress en Chrome
+      - name: Ejecutar las 23 pruebas de Cypress en Chrome
         shell: bash
         run: |
           sitio="$RUNNER_TEMP/umbral-qa"

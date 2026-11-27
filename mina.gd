@@ -5,8 +5,6 @@ var town_visit := false
 var reward_text := ""
 var blessed := false
 
-const MIXED := ["sabueso", "sabueso", "ballestero", "ballestero", "guardian"]
-const SWARM := ["sabueso", "sabueso", "sabueso", "sabueso", "ballestero", "ballestero"]
 const ORIGIN := Vector2(530, 126)
 const SIZE := Vector2(12, 10)
 const JOYSTICK := Vector2(108, 535)
@@ -38,10 +36,11 @@ const ALTURAS := {"player": 112, "sabueso": 46, "ballestero": 77, "guardian": 99
 const ANILLOS := {"player": Color("#8de7e4"), "sabueso": Color("#c9d4c4"), "ballestero": Color("#c0a9e9"), "guardian": Color("#f1c475")}
 const INVOCACIONES := ["sabueso", "ballestero", "guardian"]
 const INVOCAR := Rect2(931, 64, 185, 44)
+const TECLAS_INVOCACION := [KEY_Z, KEY_X, KEY_C]
+const ETIQUETAS_INVOCACION := ["Sabueso [Z]", "Ballestero [X]", "Custodio [C]"]
 const CERRAR_RITUAL := Rect2(451, 468, 250, 45)
-var formation: Array = []
 var ritual := false
-var preparacion := false
+var enjambre_sugerido := false
 var aviso_ritual := ""
 var defense_cooldown := 0.0
 const Progreso = preload("res://progreso.gd")
@@ -61,8 +60,6 @@ var elapsed := 0.0
 var flood := 0.0
 var state := "menu"
 var stick_id := -1
-var bell_id := -1
-var bell_time := 0.0
 var stick := Vector2.ZERO
 var sprites := {}
 var rituales_visuales: Array[Dictionary] = []
@@ -81,15 +78,14 @@ func _ready() -> void:
 	player = Combatiente.new("player", Vector2(2, 7), 100)
 
 func start(use_swarm: bool, use_veteran: bool, destino := 1) -> void:
-	formation.assign(SWARM if use_swarm else MIXED)
+	enjambre_sugerido = use_swarm
+	allies.clear()
 	veteran_guard = use_veteran
 	piercing = false
 	retaliation = false
 	relic = -1
 	relic_taken = false
 	entrar_planta(destino)
-	preparacion = true
-	ritual = true
 
 func entrar_planta(destino: int) -> void:
 	planta = clampi(destino, 1, progreso.tramo)
@@ -117,7 +113,11 @@ func entrar_planta(destino: int) -> void:
 	enemies.clear()
 	for enemigo: Array in PLANTAS.DATOS[planta - 1].enemigos:
 		enemies.append(Combatiente.new(enemigo[0], enemigo[1], enemigo[2]))
-	allies.clear()
+	for index in allies.size():
+		var unit := allies[index]
+		unit.position = posicion_invocacion(index)
+		unit.cooldown = 0.0
+	reiniciar_poses()
 	shots.clear()
 	virotes.clear()
 	marked = null
@@ -131,9 +131,9 @@ func entrar_planta(destino: int) -> void:
 	bell_cooldown = 0
 	order_cooldown = 0
 	stick_id = -1
-	bell_id = -1
 	stick = Vector2.ZERO
-	replenish()
+	ritual = false
+	aviso_ritual = ""
 	state = "play"
 
 func use_town_blessing(enabled: bool) -> void:
@@ -159,14 +159,13 @@ func seleccionar_reliquia(index: int) -> void:
 	relic = index
 	relic_taken = true
 	piercing = index == 0
-	retaliation = index == 1 and "guardian" in formation
-	if index == 1 and "guardian" not in formation:
+	retaliation = index == 1 and tiene_custodio()
+	if index == 1 and not tiene_custodio():
 		bell_cooldown = 0
 	player.health = minf(player.maximum_health, player.health + 24)
 	if index == 2:
 		player.health = player.maximum_health
 	guard = 0
-	replenish()
 	reiniciar_poses()
 	elapsed = 0
 	flood = 0
@@ -246,24 +245,40 @@ func clear_line(from: Vector2, to: Vector2, block: Rect2 = Rect2()) -> bool:
 func ritual_slot(index: int, add_unit: bool) -> Rect2:
 	return Rect2(684 if add_unit else 627, 260 + index * 65, 44, 43)
 
+func cantidad_invocada(tipo: String) -> int:
+	var cantidad := 0
+	for unit in allies:
+		if unit.role == tipo and unit.health > 0:
+			cantidad += 1
+	return cantidad
+
+func tiene_custodio() -> bool:
+	return cantidad_invocada("guardian") > 0
+
+func vinculos_ocupados() -> int:
+	return allies.size() + cantidad_invocada("guardian")
+
+func motivo_invocacion(index: int) -> String:
+	if index == 2 and tiene_custodio():
+		return "Ya tienes un custodio."
+	if vinculos_ocupados() + (2 if index == 2 else 1) > 6:
+		return "Faltan vínculos libres."
+	if bell_cooldown > 0:
+		return "Campana lista en %.1f s." % bell_cooldown
+	return ""
+
 func cambiar_invocacion(index: int, add_unit: bool) -> void:
+	if state != "play":
+		return
 	var kind: String = INVOCACIONES[index]
 	if add_unit:
-		var spaces := formation.size() + formation.count("guardian")
-		if spaces + (2 if index == 2 else 1) > 6 or (index == 2 and kind in formation):
-			aviso_ritual = "Faltan vínculos libres o ya tienes un guardián."
+		aviso_ritual = motivo_invocacion(index)
+		if not aviso_ritual.is_empty():
 			return
-		if not preparacion and bell_cooldown > 0:
-			aviso_ritual = "La campana se recupera en %.1f s." % bell_cooldown
-			return
-		formation.append(kind)
-		invocar(kind, formation.size() - 1)
-		if not preparacion:
-			bell_cooldown = maxf(2.0, 7.0 - progreso.bonus("campana"))
+		invocar(kind, allies.size())
+		var recarga := 1.4 if relic == 1 and not retaliation else 2.5
+		bell_cooldown = maxf(0.8, recarga - progreso.bonus("campana"))
 	else:
-		if kind not in formation:
-			return
-		formation.erase(kind)
 		for unit in allies:
 			if unit.role == kind:
 				allies.erase(unit)
@@ -273,15 +288,12 @@ func cambiar_invocacion(index: int, add_unit: bool) -> void:
 func toggle_ritual() -> void:
 	if state != "play":
 		return
-	if ritual and preparacion and formation.is_empty():
-		aviso_ritual = "Vincula al menos a un esbirro para continuar."
-		return
 	ritual = not ritual
-	if not ritual:
-		preparacion = false
 	stick = Vector2.ZERO
 	stick_id = -1
-	bell_id = -1
+
+func boton_invocacion(index: int) -> Rect2:
+	return Rect2(320 + index * 169, 575, 158, 54)
 
 func draw_ritual() -> void:
 	draw_rect(Rect2(0, 0, 1152, 648), Color("#0f0b11cf"))
@@ -289,40 +301,31 @@ func draw_ritual() -> void:
 	draw_rect(book, Color("#261c23"))
 	draw_rect(book, Color("#aa8756"), false, 2)
 	label(Vector2(388, 179), "Círculo de vínculos", 29)
-	label(Vector2(388, 212), "%d / 6 vínculos · El guardián ocupa dos" % (formation.size() + formation.count("guardian")), 16)
-	label(Vector2(388, 238), "Ajuste libre antes de combatir" if preparacion else "Invocar durante el combate consume la campana", 14)
+	label(Vector2(388, 212), "%d / 6 vínculos · El guardián ocupa dos" % vinculos_ocupados(), 16)
+	label(Vector2(388, 238), "Sugerencia: 4 sabuesos y 2 ballesteros" if enjambre_sugerido else "Sugerencia: 2 sabuesos, 2 ballesteros y un custodio", 14)
 	for index in INVOCACIONES.size():
 		var at := Vector2(439, 288 + index * 65)
 		var retrato: Texture2D = sprites[INVOCACIONES[index]]
 		var tamano := retrato.get_size()
 		tamano *= 39.0 / maxf(tamano.x, tamano.y)
 		draw_texture_rect(retrato, Rect2(at + Vector2(-28, -7) - tamano * 0.5, tamano), false)
-		label(at - Vector2(0, 7), "%s ×%d" % [NOMBRES_RITUAL[index], formation.count(INVOCACIONES[index])], 15)
+		label(at - Vector2(0, 7), "%s ×%d" % [NOMBRES_RITUAL[index], cantidad_invocada(INVOCACIONES[index])], 15)
 		label(at + Vector2(0, 13), EFECTOS_RITUAL[index], 12, Color("#b8b39a"))
 		for add_unit: bool in [false, true]:
 			var rect := ritual_slot(index, add_unit)
 			draw_rect(rect, Color("#534036"))
 			label(rect.position + Vector2(14, 29), "+" if add_unit else "−", 22)
-	label(Vector2(388, 453), aviso_ritual, 14, Color("#ffb986"))
+	label(Vector2(388, 453), "Campana lista en %.1f s · Sal al combate para recargar" % bell_cooldown if bell_cooldown > 0 else aviso_ritual, 14, Color("#ffb986"))
 	draw_rect(CERRAR_RITUAL, Color("#594339"))
 	label(CERRAR_RITUAL.position + Vector2(47, 28), "Continuar [F]", 18)
 
-func replenish() -> void:
-	var living := {}
-	for unit in allies:
-		living[unit.role] = living.get(unit.role, 0) + 1
-	for index in formation.size():
-		var kind: String = formation[index]
-		if living.get(kind, 0) > 0:
-			living[kind] -= 1
-			continue
-		invocar(kind, index)
+func posicion_invocacion(index: int) -> Vector2:
+	var offset := Vector2.from_angle(index * TAU / 6.0) * 0.85
+	var at := (player.position + offset).clamp(Vector2(0.25, 0.25), SIZE - Vector2(0.25, 0.25))
+	return player.position if columna.grow(0.16).has_point(at) else at
 
 func invocar(kind: String, index: int) -> void:
-	var offset := Vector2.from_angle(index * TAU / maxi(1, formation.size())) * 0.85
-	var at := (player.position + offset).clamp(Vector2(0.25, 0.25), SIZE - Vector2(0.25, 0.25))
-	if columna.grow(0.16).has_point(at):
-		at = player.position
+	var at := posicion_invocacion(index)
 	var hp := 40 + progreso.bonus("esbirros")
 	if kind == "guardian":
 		hp = (130 if veteran_guard else 100) + progreso.bonus("guardian")
@@ -386,10 +389,7 @@ func action(index: int) -> void:
 			if target and player.cooldown <= 0 and player.position.distance_to(target.position) <= 3.3 and clear_line(player.position, target.position):
 				shoot(player, target, 14 + progreso.nivel() - 1 + progreso.bonus("ataque"))
 				player.cooldown = 0.57
-		1:
-			if bell_cooldown <= 0 and allies.size() < formation.size():
-				replenish()
-				bell_cooldown = maxf(1.0, (5.0 if relic == 1 and "guardian" not in formation else 9.0) - progreso.bonus("campana"))
+		1: recall()
 		2:
 			if target and order_cooldown <= 0:
 				marked = target
@@ -464,7 +464,6 @@ func _physics_process(delta: float) -> void:
 		virotes.clear()
 		stick = Vector2.ZERO
 		stick_id = -1
-		bell_id = -1
 		var paso := PLANTAS.PLANO if planta == 3 and wave == 1 else planta
 		if elite:
 			paso = PLANTAS.ELITE if planta == 2 else PLANTAS.FORJA_ELITE
@@ -501,7 +500,6 @@ func grant_reward(paso: int) -> void:
 func aceptar_elite() -> void:
 	elite = true
 	player.health = minf(player.maximum_health, player.health + 35)
-	replenish()
 	reiniciar_poses()
 	elapsed = 0.0
 	marked = null
@@ -521,7 +519,7 @@ func reiniciar_poses() -> void:
 
 func update_ally(unit: Combatiente, index: int, delta: float) -> void:
 	var target := marked if is_instance_valid(marked) and marked.health > 0 else closest(enemies, unit.position)
-	var offset := Vector2.from_angle(index * TAU / formation.size()) * 0.95
+	var offset := Vector2.from_angle(index * TAU / allies.size()) * 0.95
 	var ranged := unit.role == "ballestero"
 	var reach := 4.4 if ranged else 0.85
 	if regroup > 0 or target == null or (target != marked and target.position.distance_to(player.position) > 3.4):
@@ -681,6 +679,10 @@ func _input(event: InputEvent) -> void:
 		if event.physical_keycode == KEY_F or (ritual and event.physical_keycode == KEY_ESCAPE):
 			toggle_ritual()
 			return
+		var invocacion := TECLAS_INVOCACION.find(event.physical_keycode)
+		if invocacion >= 0:
+			cambiar_invocacion(invocacion, true)
+			return
 		if ritual:
 			return
 		match event.physical_keycode:
@@ -695,7 +697,6 @@ func _input(event: InputEvent) -> void:
 						state = "menu"
 				else:
 					recall()
-			KEY_Q: action(1)
 			KEY_E: action(2)
 			KEY_SHIFT: action(3)
 	elif event is InputEventScreenTouch:
@@ -724,7 +725,7 @@ func options() -> Array[String]:
 		return ["1   Volver a Valdebronce"]
 	if state == "relic":
 		return ["1   Virotes perforantes · Atraviesan enemigos",
-			"2   Salva de represalia" if "guardian" in formation else "2   Campana de refuerzo",
+			"2   Salva de represalia" if tiene_custodio() else "2   Campana de refuerzo",
 			"3   Bálsamo de la mina · Recupera toda tu salud"]
 	return ["1   Formación mixta", "2   Guardia de Mara" if progreso.hallazgo else "2   Guardia de Mara · Requiere el plano", "3   Enjambre"]
 
@@ -752,12 +753,6 @@ func pointer(at: Vector2, id: int, down: bool) -> void:
 		if id == stick_id:
 			stick_id = -1
 			stick = Vector2.ZERO
-		if id == bell_id:
-			bell_id = -1
-			if Time.get_ticks_msec() - bell_time >= 380:
-				recall()
-			else:
-				action(1)
 		return
 	if ritual:
 		if CERRAR_RITUAL.has_point(at):
@@ -781,14 +776,13 @@ func pointer(at: Vector2, id: int, down: bool) -> void:
 		stick_id = id
 		stick = ((at - JOYSTICK) / 47.0).limit_length()
 		return
+	for index in INVOCACIONES.size():
+		if boton_invocacion(index).has_point(at):
+			cambiar_invocacion(index, true)
+			return
 	for index in BUTTONS.size():
 		if at.distance_to(BUTTONS[index]) < 40:
-			if index == 1:
-				if bell_id == -1:
-					bell_id = id
-					bell_time = Time.get_ticks_msec()
-			else:
-				action(index)
+			action(index)
 			return
 	var best := 31.0
 	for unit in enemies:
@@ -863,9 +857,19 @@ func _draw() -> void:
 		draw_rect(INVOCAR, Color("#372631"))
 		draw_rect(INVOCAR, Color("#a07654"), false, 1)
 		label(INVOCAR.position + Vector2(16, 28), "Invocaciones [F]", 17)
-		label(Vector2(925, 441), "Campana %.1f s  ·  Defensa %.1f s" % [bell_cooldown, defense_cooldown], 12)
-		label(Vector2(32, 115), "Nv. %d  ·  Esbirros %d/%d  ·  Enemigos %d" % [progreso.nivel(), allies.size(), formation.size(), enemies.size()], 15)
-		var relic_names := ["Virotes perforantes", "Salva de represalia" if "guardian" in formation else "Campana de refuerzo", "Bálsamo de la mina"]
+		draw_rect(Rect2(300, 537, 532, 103), Color("#141018f5"))
+		var estado_campana := "Campana lista" if bell_cooldown <= 0 else "Recarga de invocación: %.1f s" % bell_cooldown
+		label(Vector2(320, 562), "%d/6 vínculos  ·  %s" % [vinculos_ocupados(), estado_campana], 18, Color("#fff0d5"))
+		for index in INVOCACIONES.size():
+			var rect := boton_invocacion(index)
+			var listo := motivo_invocacion(index).is_empty()
+			draw_rect(rect, Color("#4e3950") if listo else Color("#28222d"))
+			draw_rect(rect, Color("#e3cba5") if listo else Color("#847788"), false, 2)
+			label(rect.position + Vector2(9, 23), ETIQUETAS_INVOCACION[index], 17, Color("#fff0d5"))
+			label(rect.position + Vector2(9, 44), "%d activos · %d vínculo%s" % [cantidad_invocada(INVOCACIONES[index]), 2 if index == 2 else 1, "s" if index == 2 else ""], 13)
+		label(Vector2(32, 115), "Nv. %d  ·  Vida %d/%d  ·  Enemigos %d" % [progreso.nivel(), ceili(player.health), ceili(player.maximum_health), enemies.size()], 16)
+		label(Vector2(925, 441), "Defensa %.1f s" % defense_cooldown, 15)
+		var relic_names := ["Virotes perforantes", "Salva de represalia" if retaliation else "Campana de refuerzo", "Bálsamo de la mina"]
 		if blessed:
 			label(Vector2(32, 160), "Bendición de Elías", 15, Color("#b4cfcb"))
 		label(Vector2(32, 138), "Oleada %d/2 · %s" % [wave, relic_names[relic] if relic_taken else "Reliquia por descubrir"] if planta == 3 else PLANTAS.DATOS[planta - 1].aviso, 14)
@@ -874,8 +878,8 @@ func _draw() -> void:
 		draw_circle(JOYSTICK, 57, Color("#1e181cbb"))
 		draw_arc(JOYSTICK, 57, 0, TAU, 48, Color("#998061"), 2.0, true)
 		draw_circle(JOYSTICK + stick * 37, 23, Color("#695244"))
-		var names := ["Ataque", "Campana", "Orden", "Defensa"]
-		var keys := ["ESPACIO", "Q", "E", "MAYÚS"]
+		var names := ["Ataque", "Reagrupar", "Orden", "Defensa"]
+		var keys := ["ESPACIO", "R", "E", "MAYÚS"]
 		for i in BUTTONS.size():
 			var at: Vector2 = BUTTONS[i]
 			draw_circle(at, 37, Color("#241c1fee"))
@@ -891,7 +895,7 @@ func _draw() -> void:
 		if state == "won": title = "Campanario silenciado" if planta == PLANTAS.DATOS.size() else "Sala asegurada"
 		if state == "death": title = "El Vinculador ha caído"
 		label(Vector2(342, 244), title, 29)
-		var subtitle := "Valdebronce  ·  Victorias: %d" % progreso.victorias
+		var subtitle := "Invoca tu propio séquito al entrar en la mina."
 		var choices := options()
 		if state in ["won", "relic"]:
 			subtitle = reward_text

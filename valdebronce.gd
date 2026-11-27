@@ -63,6 +63,9 @@ var tiempo_plaza := 0.0
 const AMBIENTE = preload("res://ambiente.gd")
 const BOTON_AUDIO := Rect2(982, 55, 121, 34)
 var ambiente: AMBIENTE
+const BOTON_AYUDA := Rect2(726, 55, 116, 40)
+var ayuda: ColorRect
+var continuar_ayuda: Button
 
 func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
@@ -74,6 +77,61 @@ func _ready() -> void:
 	add_child(plaza)
 	figura_plaza = plaza.crear_figura()
 	actualizar_figura_plaza(1.0)
+	crear_ayuda()
+	mostrar_ayuda()
+
+func crear_ayuda() -> void:
+	var capa := CanvasLayer.new()
+	add_child(capa)
+	ayuda = ColorRect.new()
+	ayuda.size = Vector2(1152, 648)
+	ayuda.color = Color("#0e0b12f5")
+	capa.add_child(ayuda)
+	var contenido := VBoxContainer.new()
+	contenido.position = Vector2(208, 55)
+	contenido.custom_minimum_size.x = 736
+	contenido.add_theme_constant_override("separation", 14)
+	ayuda.add_child(contenido)
+	var titulo := Label.new()
+	titulo.text = "Controles del Vinculador"
+	titulo.add_theme_font_size_override("font_size", 36)
+	contenido.add_child(titulo)
+	var pasos := [
+		["Moverte", "WASD o flechas · En táctil, usa el joystick."],
+		["Explorar Valdebronce", "Acércate a un edificio y pulsa E o toca su nombre."],
+		["Invocar", "Z · Sabueso     X · Ballestero     C · Custodio (2 vínculos)"],
+		["Combatir", "Espacio · Atacar     E · Dar la orden     Mayús · Defender"],
+		["Dirigir al séquito", "Clic o toque en el objetivo · R o Reagrupar para reunirlo."],
+		["Controles en pantalla", "Toca las acciones o las invocaciones para usarlas al instante."],
+	]
+	for paso in pasos:
+		var fila := VBoxContainer.new()
+		fila.add_theme_constant_override("separation", 1)
+		contenido.add_child(fila)
+		var encabezado := Label.new()
+		encabezado.text = paso[0]
+		encabezado.add_theme_color_override("font_color", Color("#f4ca91"))
+		encabezado.add_theme_font_size_override("font_size", 21)
+		fila.add_child(encabezado)
+		var detalle := Label.new()
+		detalle.text = paso[1]
+		detalle.add_theme_font_size_override("font_size", 19)
+		fila.add_child(detalle)
+	continuar_ayuda = Button.new()
+	continuar_ayuda.text = "Continuar [Intro]"
+	continuar_ayuda.custom_minimum_size = Vector2(0, 58)
+	continuar_ayuda.add_theme_font_size_override("font_size", 23)
+	continuar_ayuda.pressed.connect(cerrar_ayuda)
+	contenido.add_child(continuar_ayuda)
+
+func mostrar_ayuda() -> void:
+	stick = Vector2.ZERO
+	stick_id = -1
+	ayuda.show()
+	continuar_ayuda.grab_focus()
+
+func cerrar_ayuda() -> void:
+	ayuda.hide()
 
 func _process(delta: float) -> void:
 	if is_instance_valid(battle):
@@ -81,7 +139,7 @@ func _process(delta: float) -> void:
 	tiempo_plaza += delta
 	plaza.actualizar_plaza(tiempo_plaza)
 	queue_redraw()
-	if panel >= 0:
+	if ayuda.visible or panel >= 0:
 		actualizar_figura_plaza(delta)
 		return
 	var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
@@ -140,8 +198,16 @@ func _input(event: InputEvent) -> void:
 		return
 	if is_instance_valid(battle):
 		return
+	if ayuda.visible:
+		if event is InputEventKey and event.pressed and not event.echo:
+			if event.physical_keycode in [KEY_ENTER, KEY_ESCAPE, KEY_H, KEY_SPACE]:
+				cerrar_ayuda()
+				get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
+			KEY_H:
+				mostrar_ayuda()
 			KEY_E, KEY_ENTER:
 				if panel == 2:
 					descend(destino_mina)
@@ -176,6 +242,11 @@ func _input(event: InputEvent) -> void:
 		stick = ((event.position - JOYSTICK) / 47.0).limit_length()
 
 func pointer(point: Vector2, id: int, pressed: bool) -> void:
+	if ayuda.visible:
+		return
+	if pressed and panel == -1 and BOTON_AYUDA.has_point(point):
+		mostrar_ayuda()
+		return
 	if pressed and BOTON_AUDIO.has_point(point):
 		ambiente.alternar()
 		return
@@ -254,7 +325,7 @@ func choose(index: int) -> void:
 				return
 			formation = index
 			panel = -1
-			message = FORMATIONS[formation] + " preparada."
+			message = FORMATIONS[formation] + " seleccionada."
 		1:
 			if index == 0 and progreso.victorias > 0:
 				blessing = not blessing
@@ -313,6 +384,8 @@ func _draw() -> void:
 	draw_rect(Rect2(855, 41, 216, 5), Color("#48342c"))
 	draw_rect(Rect2(855, 41, 216.0 * (progreso.xp - base) / goal, 5), GOLD)
 	text(Vector2(855, 72), FORMATIONS[formation], 14)
+	draw_rect(BOTON_AYUDA, Color("#32242a"))
+	text(BOTON_AYUDA.position + Vector2(12, 26), "Ayuda [H]", 17)
 	draw_rect(BOTON_AUDIO, Color("#32242a"))
 	text(BOTON_AUDIO.position + Vector2(9, 22), "Silencio [M]" if ambiente.silenciado else "Música [M]", 14)
 	for index in LOCATIONS.size():
@@ -356,7 +429,7 @@ func _draw() -> void:
 		text(Vector2(768, 254), "×", 25)
 		match panel:
 			0:
-				text(Vector2(370, 312), "Mara · Prepara a tu ejército antes de bajar.")
+				text(Vector2(370, 312), "Mara · Elige una sugerencia de formación.")
 				for index in 3:
 					var caption: String = FORMATIONS[index]
 					if index == 1 and not progreso.hallazgo:
@@ -368,7 +441,7 @@ func _draw() -> void:
 				text(Vector2(370, 312), "Elías · Vence al capataz para desbloquear su bendición." if not unlocked else "Elías · Empieza con una protección de un solo uso.", 15)
 				draw_option(0, "Retirar bendición" if blessing else ("Equipar bendición" if unlocked else "Bendición bloqueada"))
 			2:
-				text(Vector2(370, 305), FORMATIONS[formation] + " · Cada intento reinicia las reliquias.", 14)
+				text(Vector2(370, 305), "Cada intento empieza sin esbirros ni reliquias.", 14)
 				text(Vector2(370, 329), "Conservas XP, equipo, talentos y accesos.", 14)
 				draw_option(0, "Descender a " + PLANTAS.nombre(destino_mina))
 				if progreso.tramo > 1:

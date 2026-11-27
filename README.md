@@ -10,18 +10,19 @@ ARPG en GDScript para Godot 4. Abre `project.godot` con **Importar** en el gesto
 | Abrir talentos y mochila en el pueblo | T e I | Botones Talentos y Mochila |
 | Atacar | Espacio | Ataque |
 | Marcar y dar la orden de atacar | Clic en el enemigo y E | Toca al enemigo y pulsa Orden |
-| Elegir tus invocaciones | F, luego + o − junto a cada tipo | Invocaciones, luego + o − |
-| Reponer esbirros caídos | Q | Toque en Campana |
-| Reagrupar | R | Mantén Campana pulsada y suéltala |
+| Invocar sabueso, ballestero o custodio | Z, X, C | Botones Sabueso, Ballestero y Custodio |
+| Consultar efectos o despedir esbirros | F abre el círculo, − despide una criatura | Invocaciones, luego − |
+| Reagrupar | R | Reagrupar |
+| Consultar los controles en el pueblo | H | Ayuda |
 | Defenderse | Mayús | Defensa |
 
-La forja de Mara prepara una formación inicial que puedes modificar al entrar en la mina. Hay seis vínculos disponibles. El guardián ocupa dos y solo puedes llevar uno. Durante el combate puedes cambiar el grupo con F. Las nuevas invocaciones comparten la recarga de la campana. Q recupera las bajas de la composición que elegiste.
+La pantalla inicial explica cómo moverte, combatir e invocar. Pulsa Intro, Escape o Continuar para empezar. Cada descenso comienza con el Vinculador solo. Cada pulsación invoca una criatura y activa una recarga compartida. Tienes seis vínculos. El custodio ocupa dos y solo puedes tener uno. Si cae un esbirro, recuperas su espacio para elegir qué invocas después. El círculo de vínculos pausa el combate y describe cada criatura. La forja ofrece sugerencias de composición y la Guardia de Mara mejora al custodio que invoques.
 
 En el pueblo, abre la mochila con I. Arrastra el objeto a su ranura o selecciónalo y pulsa Equipar. Para quitarlo, arrástralo a la mochila o pulsa Quitar. Los tintes debajo del retrato se guardan y se ven tanto en Valdebronce como al combatir.
 
 Los enemigos marcan en el suelo dónde van a golpear. Sal del área y reúne a tus esbirros con R si hay riesgo de que les alcance el golpe. Los acechadores, teñidos de rojo, buscan al Vinculador. Marcar un objetivo aumenta el daño coordinado de los esbirros sobre él. La defensa reduce el golpe durante 0,6 s y tarda 3,2 s en recargarse.
 
- En la entrada de la mina, selecciona cualquier planta desbloqueada. Tu primer descenso empieza en la Bocamina. Si limpias una planta, puedes seguir o volver a Valdebronce para gastar puntos y equiparte. Los accesos, la XP, los talentos, el equipo, el plano y las victorias contra el capataz se conservan al volver, morir o cerrar el juego. Las recompensas son de primera entrega. Continuar mantiene la reliquia y repone al grupo. Un nuevo intento reinicia los encuentros y la reliquia.
+ En la entrada de la mina, selecciona cualquier planta desbloqueada. Tu primer descenso empieza en la Bocamina. Si limpias una planta, puedes seguir o volver a Valdebronce para gastar puntos y equiparte. Los accesos, la XP, los talentos, el equipo, el plano y las victorias contra el capataz se conservan al volver, morir o cerrar el juego. Las recompensas son de primera entrega. Continuar mantiene la reliquia y los esbirros supervivientes con su salud actual. Un nuevo intento reinicia los encuentros y la reliquia.
 
 - **−1 · Bocamina.** Marca al minero que viene por el lateral y reagrupa cuando se dividan tus esbirros. La primera victoria da un bastón y un punto de talento.
 - **−2 · Raíles partidos.** Coloca a los ballesteros en los pasos estrechos. El desvío opcional anuncia su amuleto y su XP.

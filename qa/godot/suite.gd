@@ -9,6 +9,8 @@ var tmp := OS.get_environment("UMBRAL_TEST_DIR")
 var archivos := 0
 var resultados: Array[Dictionary] = []
 var escena: Node
+const MIXTA := [0, 0, 1, 1, 2]
+const ENJAMBRE := [0, 0, 0, 0, 1, 1]
 
 func _initialize() -> void:
 	call_deferred("run")
@@ -19,7 +21,7 @@ func perfil():
 	datos.ruta_guardado = tmp.path_join("perfil-%d.cfg" % archivos)
 	return datos
 
-func mina(planta := 1, enjambre := false):
+func mina(planta := 1, enjambre := false, con_sequito := true):
 	var batalla := Mina.instantiate()
 	batalla.progreso = perfil()
 	batalla.progreso.tramo = planta
@@ -27,6 +29,10 @@ func mina(planta := 1, enjambre := false):
 	batalla.set_physics_process(false)
 	batalla.set_process(false)
 	batalla.start(enjambre, false, planta)
+	if con_sequito:
+		for tipo: int in ENJAMBRE if enjambre else MIXTA:
+			batalla.bell_cooldown = 0
+			batalla.cambiar_invocacion(tipo, true)
 	escena = batalla
 	return batalla
 
@@ -41,8 +47,8 @@ func run() -> void:
 		quit(2)
 		return
 	var casos := [
-		["C01 | Mixta con dos ballesteros y un custodio", c01],
-		["C02 | Enjambre sin custodio", c02],
+		["C01 | La mina empieza sin esbirros ni ritual abierto", c01],
+		["C02 | Las teclas Z, X y C invocan su propio esbirro", c02],
 		["C03 | El custodio ocupa dos vínculos", c03],
 		["C04 | Reagrupar elimina la marca", c04],
 		["C05 | El ritual pausa la simulación", c05],
@@ -55,6 +61,10 @@ func run() -> void:
 		["C12 | El sabueso se cura al rematar al marcado", c12],
 		["C13 | El custodio cercano absorbe daño", c13],
 		["C14 | La pasarela protege de la inundación", c14],
+		["C15 | Los botones táctiles respetan la recarga compartida", c15],
+		["C16 | Una baja libera vínculos sin resucitar sola", c16],
+		["C17 | Continuar conserva vivos y un nuevo intento empieza vacío", c17],
+		["C18 | La ayuda inicial tiene foco y se puede reabrir", c18],
 		["P01 | La expedición empieza en la Bocamina", p01],
 		["P02 | Se gana experiencia y se desbloquea la planta siguiente", p02],
 		["P03 | No se duplica el botín al repetir una victoria", p03],
@@ -93,23 +103,35 @@ func run() -> void:
 	print("Godot: %d/%d casos aprobados." % [aprobados, casos.size()])
 	quit(0 if aprobados == casos.size() else 1)
 
+func pulsar(nodo: Node, tecla: Key) -> void:
+	var evento := InputEventKey.new()
+	evento.physical_keycode = tecla
+	evento.pressed = true
+	nodo._input(evento)
+
 func c01() -> bool:
-	var m = mina()
-	return m.allies.size() == 5 and m.formation.count("ballestero") == 2 and m.formation.count("guardian") == 1
+	var m = mina(1, false, false)
+	return m.allies.is_empty() and not m.ritual and m.state == "play"
 
 func c02() -> bool:
-	var m = mina(1, true)
-	return m.allies.size() == 6 and m.formation.count("sabueso") == 4 and "guardian" not in m.formation
+	var m = mina(1, false, false)
+	for tecla: Key in [KEY_Z, KEY_X, KEY_C]:
+		m.bell_cooldown = 0
+		pulsar(m, tecla)
+	return m.allies.map(func(unit: Combatiente): return unit.role) == ["sabueso", "ballestero", "guardian"]
 
 func c03() -> bool:
 	var m = mina(1, true)
+	m.bell_cooldown = 0
 	m.cambiar_invocacion(2, true)
-	if "guardian" in m.formation:
+	if m.tiene_custodio():
 		return false
 	m.cambiar_invocacion(0, false)
 	m.cambiar_invocacion(0, false)
 	m.cambiar_invocacion(2, true)
-	return m.formation.size() == 5 and m.formation.count("guardian") == 1
+	m.bell_cooldown = 0
+	m.cambiar_invocacion(2, true)
+	return m.vinculos_ocupados() == 6 and m.cantidad_invocada("guardian") == 1
 
 func c04() -> bool:
 	var m = mina()
@@ -119,6 +141,7 @@ func c04() -> bool:
 
 func c05() -> bool:
 	var m = mina()
+	m.toggle_ritual()
 	m._physics_process(0.5)
 	return m.ritual and m.elapsed == 0.0
 
@@ -192,13 +215,54 @@ func c13() -> bool:
 
 func c14() -> bool:
 	var m = mina(3)
-	m.toggle_ritual()
 	m.elapsed = 9.5
 	m.player.position = Vector2(8, 1.5)
 	m.allies[0].position = Vector2(8, 2.3)
 	var vida: float = m.allies[0].health
 	m._physics_process(PASO)
 	return m.player.health == 100 and m.allies[0].health < vida
+
+func c15() -> bool:
+	var m = mina(1, false, false)
+	m.pointer(m.boton_invocacion(0).get_center(), 0, true)
+	m.pointer(m.boton_invocacion(1).get_center(), 1, true)
+	if m.allies.size() != 1:
+		return false
+	m._physics_process(2.5)
+	m.pointer(m.boton_invocacion(1).get_center(), 1, true)
+	return m.cantidad_invocada("ballestero") == 1
+
+func c16() -> bool:
+	var m = mina()
+	m.allies.back().health = 0
+	m._physics_process(PASO)
+	m.recall()
+	return not m.tiene_custodio() and m.vinculos_ocupados() == 4
+
+func c17() -> bool:
+	var m = mina()
+	m.allies[0].health = 17
+	m.allies.back().health = 0
+	m._physics_process(PASO)
+	m.grant_reward(1)
+	m.choose(0)
+	if m.planta != 2 or m.allies.size() != 4 or m.allies[0].health != 17:
+		return false
+	m.start(false, false, 2)
+	return m.allies.is_empty()
+
+func c18() -> bool:
+	var pueblo := Pueblo.instantiate()
+	pueblo.progreso = perfil()
+	root.add_child(pueblo)
+	escena = pueblo
+	if not pueblo.ayuda.visible or not pueblo.continuar_ayuda.has_focus():
+		return false
+	pulsar(pueblo, KEY_ENTER)
+	if pueblo.ayuda.visible:
+		return false
+	pulsar(pueblo, KEY_H)
+	return pueblo.ayuda.visible and pueblo.continuar_ayuda.has_focus()
 
 func p01() -> bool:
 	var m = mina()
@@ -247,7 +311,6 @@ func p08() -> bool:
 	var m = mina()
 	if m.progreso.registrar(1, 55, 0) != OK or m.progreso.equipar(0) != OK:
 		return false
-	m.toggle_ritual()
 	m.player.health = 0
 	m._physics_process(PASO)
 	var nuevo := Perfil.new()
@@ -277,7 +340,6 @@ func p11() -> bool:
 	m.enemies.clear()
 	m.grant_reward(7)
 	m.choose(2)
-	m.toggle_ritual()
 	m.player.position = Vector2(3.4, 7.2)
 	ticks(m)
 	return m.state == "won" and 13 in m.progreso.inventario and Plantas.FORJA_ELITE in m.progreso.recompensas
@@ -294,15 +356,14 @@ func p14() -> bool:
 	return m.state == "won" and 12 in m.progreso.inventario and m.options().size() == 1
 
 func recorrido(enjambre: bool) -> bool:
-	var m = mina(1, enjambre)
-	m.toggle_ritual()
+	var m = mina(1, enjambre, false)
 	for planta in range(1, 9):
 		if m.planta != planta:
 			return false
-		ticks(m)
+		ticks(m, enjambre)
 		if planta == 3 and m.state == "relic":
 			m.choose(1 if enjambre else 0)
-			ticks(m)
+			ticks(m, enjambre)
 		if m.state != "won" or m.save_failed:
 			return false
 		if planta == 1 and (m.progreso.equipar(0) != OK or m.progreso.aprender(6 if enjambre else 3) != OK):
@@ -311,7 +372,9 @@ func recorrido(enjambre: bool) -> bool:
 			m.choose(0)
 	return m.progreso.tramo == 8 and 12 in m.progreso.inventario
 
-func ticks(m: Node) -> void:
+func ticks(m: Node, enjambre := false) -> void:
+	var composicion := [4, 2, 0] if enjambre else [2, 2, 1]
+	var prioridad := [0, 1, 2] if enjambre else [2, 1, 0]
 	for i in 5400:
 		if m.state != "play":
 			return
@@ -332,7 +395,11 @@ func ticks(m: Node) -> void:
 			m.walk(m.player, Vector2.DOWN, 0.14)
 			m.recall()
 		m.action(0)
-		m.action(1)
+		if m.bell_cooldown <= 0:
+			for tipo: int in prioridad:
+				if m.cantidad_invocada(m.INVOCACIONES[tipo]) < composicion[tipo]:
+					pulsar(m, m.TECLAS_INVOCACION[tipo])
+					break
 		if i % 30 == 0:
 			m.action(3)
 		m._physics_process(PASO)

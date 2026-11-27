@@ -1,15 +1,15 @@
 # Pruebas de Las Campanas del Umbral
 
-La batería tiene **56 casos**. Godot ejecuta 36 casos de reglas y escenas. Cypress ejecuta 20 casos en Chrome. El smoke público vuelve a ejecutar 10 de esos casos sobre GitHub Pages.
+La batería tiene **63 casos**. Godot ejecuta 36 casos de reglas y escenas. Cypress ejecuta 20 casos en Chrome. El smoke público vuelve a ejecutar 10 de esos casos sobre GitHub Pages.
 
 | Casos | Qué comprueban | Archivo |
 | --- | --- | --- |
-| C01–C14 | Formaciones, ritual, órdenes, virotes, efectos, custodia y pasarela | [suite.gd](godot/suite.gd) |
+| C01–C18 | Formaciones, ritual, órdenes, virotes, efectos, custodia y pasarela | [suite.gd](godot/suite.gd) |
 | P01–P14 | Desbloqueos, XP, recompensas, guardados antiguos, derrota, élite y las dos rutas hasta la −8 | [suite.gd](godot/suite.gd) |
 | E01–E08 | Compra, venta, recompra, equipamiento y contratos | [suite.gd](godot/suite.gd) |
 | W01–W06 | Documento HTML, título, viewport, canvas y rutas relativas | [01-portada.cy.js](web/cypress/e2e/01-portada.cy.js) |
 | W07–W10 | JavaScript, WebAssembly, paquete del juego y arranque con foco | [02-exportacion.cy.js](web/cypress/e2e/02-exportacion.cy.js) |
-| W11–W20 | Plaza, movimiento, mochila, talentos, música, recarga, acceso a Bocamina y ritual | [03-partida.cy.js](web/cypress/e2e/03-partida.cy.js) |
+| W11–W23 | Plaza, movimiento, mochila, talentos, música, recarga, ayuda inicial, acceso a Bocamina e invocación manual | [03-partida.cy.js](web/cypress/e2e/03-partida.cy.js) |
 
 ## Godot desde cero
 
