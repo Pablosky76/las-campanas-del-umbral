@@ -1,0 +1,12 @@
+{
+  "name": "campanas-del-umbral-qa",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "cypress run --browser chrome",
+    "test:public": "cypress run --browser chrome --spec 'cypress/e2e/01-portada.cy.js,cypress/e2e/02-exportacion.cy.js'"
+  },
+  "devDependencies": {
+    "cypress": "15.21.2"
+  }
+}

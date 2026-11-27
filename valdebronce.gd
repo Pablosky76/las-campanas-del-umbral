@@ -275,6 +275,7 @@ func descend(destino := 0) -> void:
 	panel = -1
 	plaza.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	battle = MINA.instantiate()
+	battle.progreso.ruta_guardado = progreso.ruta_guardado
 	battle.return_to_town.connect(return_from_mine)
 	add_child(battle)
 	battle.start(formation == 2, formation == 1, progreso.tramo if destino == 0 else destino)

@@ -1,31 +1,28 @@
-name: Generar y publicar juego web
+name: Probar y publicar juego web
 
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: juego-web-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
   web:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       GODOT_VERSION: 4.7.2
 
     steps:
       - uses: actions/checkout@v5
-
-      - name: Configurar GitHub Pages
-        uses: actions/configure-pages@v5
 
       - name: Descargar Godot y la plantilla Web
         shell: bash
@@ -39,7 +36,57 @@ jobs:
           mkdir -p "$carpeta"
           unzip -jo "$RUNNER_TEMP/templates.tpz" '*/web_nothreads_release.zip' '*/web_nothreads_debug.zip' -d "$carpeta"
 
+      - name: Ejecutar las 36 pruebas de Godot
+        shell: bash
+        env:
+          GODOT_BIN: ${{ runner.temp }}/godot
+        run: qa/godot/run.sh | tee "$RUNNER_TEMP/godot-qa.tap"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: qa/web/package-lock.json
+
+      - name: Instalar Cypress
+        run: npm ci --prefix qa/web
+
+      - name: Generar una compilación temporal para Cypress
+        shell: bash
+        run: |
+          proyecto="$RUNNER_TEMP/proyecto-qa"
+          sitio="$RUNNER_TEMP/umbral-qa"
+          mkdir -p "$proyecto" "$sitio"
+          git archive HEAD | tar -x -C "$proyecto"
+          cp qa/web/godot-probe.gd "$proyecto/godot-probe.gd"
+          printf '\n[autoload]\n\nUmbralQA="*res://godot-probe.gd"\n' >> "$proyecto/project.godot"
+          "$RUNNER_TEMP/godot" --headless --path "$proyecto" --import
+          "$RUNNER_TEMP/godot" --headless --path "$proyecto" --export-release Web "$sitio/index.html"
+
+      - name: Ejecutar las 20 pruebas de Cypress en Chrome
+        shell: bash
+        run: |
+          sitio="$RUNNER_TEMP/umbral-qa"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$sitio" > "$RUNNER_TEMP/servidor-qa.log" 2>&1 &
+          servidor=$!
+          trap 'kill "$servidor" 2>/dev/null || true' EXIT
+          curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:4173/ -o /dev/null
+          npm test --prefix qa/web
+
+      - name: Guardar resultados de QA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-qa
+          path: |
+            ${{ runner.temp }}/godot-qa.tap
+            ${{ runner.temp }}/servidor-qa.log
+            qa/web/resultados/
+            qa/web/cypress/screenshots/
+          if-no-files-found: ignore
+
       - name: Exportar y verificar los archivos Web
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         shell: bash
         run: |
           sitio="$RUNNER_TEMP/umbral-web"
@@ -50,8 +97,10 @@ jobs:
             test -s "$sitio/$archivo"
           done
           touch "$sitio/.nojekyll"
+          printf '%s\n' "$GITHUB_SHA" > "$sitio/version.txt"
 
       - name: Guardar juego descargable
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: Campanas-del-Umbral-Web
@@ -59,14 +108,21 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
 
-      - name: Preparar publicacion web
+      - name: Preparar la publicación web
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: ${{ runner.temp }}/umbral-web/
 
   deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      pages: write
+      id-token: write
     needs: web
     runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -75,3 +131,41 @@ jobs:
       - name: Publicar videojuego
         id: deployment
         uses: actions/deploy-pages@v4
+
+
+  smoke-publico:
+    name: Verificar la web publicada
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      UMBRAL_WEB_URL: ${{ needs.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: qa/web/package-lock.json
+      - run: npm ci --prefix qa/web
+      - name: Esperar la versión exacta y probar el arranque público
+        shell: bash
+        run: |
+          for intento in {1..15}; do
+            if [[ "$(curl -fsS "${UMBRAL_WEB_URL%/}/version.txt?v=$GITHUB_SHA" || true)" == "$GITHUB_SHA" ]]; then
+              npm run test:public --prefix qa/web
+              exit 0
+            fi
+            sleep 4
+          done
+          echo "Pages aún no sirve el commit $GITHUB_SHA"
+          exit 1
+      - name: Guardar resultados públicos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-smoke-publico
+          path: |
+            qa/web/resultados/
+            qa/web/cypress/screenshots/
+          if-no-files-found: ignore

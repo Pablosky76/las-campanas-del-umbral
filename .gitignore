@@ -2,3 +2,8 @@
 .export/
 .DS_Store
 *.translation
+
+qa/web/node_modules/
+qa/web/resultados/
+qa/web/cypress/screenshots/
+qa/web/cypress/videos/

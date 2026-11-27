@@ -2,6 +2,7 @@ extends RefCounted
 
 const PLANTAS = preload("res://plantas.gd")
 const SAVE := "user://valdebronce.cfg"
+var ruta_guardado := SAVE
 const TALENTOS := [
 	["Pulso de bronce", "+6 daño de ataque", "ataque", 6],
 	["Tormenta de virotes", "+4 daño de ballesteros", "virotes", 4],
@@ -58,7 +59,7 @@ var equipo: Array[int] = [-1, -1, -1]
 
 func cargar() -> void:
 	var config := ConfigFile.new()
-	if config.load(SAVE) != OK:
+	if config.load(ruta_guardado) != OK:
 		return
 	victorias = maxi(0, int(config.get_value("perfil", "victorias", 0)))
 	hallazgo = config.get_value("perfil", "plano", false) == true
@@ -277,7 +278,7 @@ func guardar() -> Error:
 	config.set_value("personaje", "talentos", talentos)
 	config.set_value("personaje", "inventario", inventario)
 	config.set_value("personaje", "equipo", equipo)
-	var result := config.save(SAVE + ".tmp")
+	var result := config.save(ruta_guardado + ".tmp")
 	if result == OK:
-		result = DirAccess.rename_absolute(SAVE + ".tmp", SAVE)
+		result = DirAccess.rename_absolute(ruta_guardado + ".tmp", ruta_guardado)
 	return result
